@@ -241,13 +241,17 @@ namespace NermNermNerm.Junimatic
         {
             // Note this function is only called on the master game
             this.childCrawlDestination = null;
+
+            // This section is probably not needed -- the game seems to clear all the critters
+            // from a location when no players are in it.
             var balloon = this.GetBalloon();
             if (balloon is not null)
             {
                 this.currentLocation.critters.Remove(balloon);
-                this.childToPlayWith.IsInvisible = false;
-                this.isDragDownJump = false;
             }
+
+            this.childToPlayWith.IsInvisible = false;
+            this.isDragDownJump = false;
 
             base.OnFarmersLeftFarmhouse();
         }
