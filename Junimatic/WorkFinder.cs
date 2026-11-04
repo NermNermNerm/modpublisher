@@ -24,9 +24,6 @@ namespace NermNermNerm.Junimatic
 
         public bool AreJunimosRaisinPowered { get; private set; }
 
-        /// <summary>The number of Junimos that are being simulated out doing stuff.</summary>
-        private readonly Dictionary<JunimoType, int> numAutomatedJunimos = Enum.GetValues<JunimoType>().ToDictionary(t => t, t => 0);
-
         private static readonly Point[] walkableDirections = [new Point(-1, 0), new Point(1, 0), new Point(0, -1), new Point(0, 1)];
         private static readonly Point[] crabPotReachableDirections = [new Point(-2, 0), new Point(2, 0), new Point(0, -2), new Point(0, 2)];
         private static readonly Point[] reachableDirections = [
@@ -114,13 +111,6 @@ namespace NermNermNerm.Junimatic
         {
             var isShinyTest = this.mod.JunimoStatusDialog.GetIsShinyTest();
             var numAvailableJunimos = this.GetNumUnlockedJunimos();
-            foreach (var junimoType in Enum.GetValues<JunimoType>())
-            {
-                if (isAutomationInterval)
-                {
-                    this.numAutomatedJunimos[junimoType] = 0;
-                }
-            }
 
             var allJunimoFriendlyLocations = this.GetAllJunimoFriendlyLocations();
             foreach (var location in allJunimoFriendlyLocations)
