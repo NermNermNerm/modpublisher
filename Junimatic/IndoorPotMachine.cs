@@ -78,7 +78,7 @@ namespace NermNermNerm.Junimatic
             get
             {
                 // While growing, foragables look like any other crop in HoeDirt, data wise.
-                // Once full grown, the foragable is added to the pot's heldObject field and removed from HoeDirt. See Crop.newDay for logic. 
+                // Once full grown, the foragable is added to the pot's heldObject field and removed from HoeDirt. See Crop.newDay for logic.
                 if (this.Machine.heldObject.Value != null)
                 {
                     var harvest = this.Machine.heldObject.Value;
@@ -86,10 +86,15 @@ namespace NermNermNerm.Junimatic
                 }
 
                 // Harvest crop from HoeDirt
-                if (this.Machine.hoeDirt.Value is HoeDirt dirt && dirt.crop is not null)
+                if (this.Machine.hoeDirt.Value is { crop: not null } dirt)
                 {
                     Crop crop = dirt.crop;
                     var data = crop.GetData();
+                    // TODO:
+                    if (data is null)
+                    {
+                        throw new InvalidOperationException(I("IndoorPotMachine.EstimatedProducts called when the pot wasn't ready to harvest (no crop data)"));
+                    }
 
                     return [
                         // The quality is not known until harvest
@@ -109,7 +114,7 @@ namespace NermNermNerm.Junimatic
                 }
 
                 // Harvest from bush
-                if (this.Machine.bush.Value is Bush bush)
+                if (this.Machine.bush.Value is { } bush)
                 {
                     // Note: The only stock item that's possible to be harvested via this path is Tea Saplings.
                     string itemQiid = bush.GetShakeOffItem();
@@ -138,7 +143,7 @@ namespace NermNermNerm.Junimatic
 
             // Harvest foragables
             // While growing, foragables look like any other crop in HoeDirt, data wise.
-            // Once full grown, the foragable is added to the pot's heldObject field and removed from HoeDirt. See Crop.newDay for logic. 
+            // Once full grown, the foragable is added to the pot's heldObject field and removed from HoeDirt. See Crop.newDay for logic.
             if (this.Machine.heldObject.Value != null)
             {
                 // Convert the object to its metadata
@@ -189,7 +194,7 @@ namespace NermNermNerm.Junimatic
         /// <summary>
         /// Harvest Bush and add the output to this.HarvestItems
         /// </summary>
-        /// <param name="bush">The bush of the IndoorPot</param> 
+        /// <param name="bush">The bush of the IndoorPot</param>
         private List<Item> HarvestBush(Bush bush)
         {
             // Call Bush.shake to harvest to support custom bushes
@@ -214,7 +219,7 @@ namespace NermNermNerm.Junimatic
                 if (this.Machine.heldObject.Value != null) return true;
 
                 // Check HoeDirt
-                if (this.Machine.hoeDirt.Value is HoeDirt dirt && dirt.readyForHarvest()) return true;
+                if (this.Machine.hoeDirt.Value is HoeDirt dirt && dirt.readyForHarvest() && dirt.crop.GetData() != null) return true;
 
                 // Check Bush
                 if (this.Machine.bush.Value is Bush bush && bush.tileSheetOffset.Value == 1 && bush.inBloom()) return true;
