@@ -171,7 +171,9 @@ namespace NermNermNerm.Junimatic
                     {
                         if (numAvailableJunimos[junimoType] > 0)
                         {
+                            var w = Stopwatch.StartNew();
                             var project = this.FindProject(portal, junimoType, null, isShinyTest);
+                            this.LogTrace($"FindProject took {w.ElapsedMilliseconds}ms");
                             if (project is not null)
                             {
                                 this.LogTrace($"Starting Animated Junimo for {project}");
