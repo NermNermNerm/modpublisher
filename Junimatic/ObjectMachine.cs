@@ -81,12 +81,57 @@ namespace NermNermNerm.Junimatic
         /// <inheritdoc/>>
         protected override IReadOnlyList<EstimatedProduct> EstimatedProducts => [this.HeldObjectToEstimatedProduct(this.Machine.heldObject.Value)];
 
+        private static HashSet<(string machineId, int inventoryHash)> isKnownHash = new();
+
+        private static int cacheHits;
+        private static int cacheMisses;
+        private static DateTime lastReportTime = DateTime.MinValue;
+
         /// <inheritdoc/>>
         public override List<Item>? GetRecipeFromChest(GameStorage storage, Func<Item, bool> isShinyTest)
         {
             if (this.IsManualFeedMachine)
             {
                 return null;
+            }
+
+            if (((ObjectMachine.cacheHits + ObjectMachine.cacheMisses) & 0x3ff) == 0x3ff)
+            {
+                var now = DateTime.Now;
+                if (now - ObjectMachine.lastReportTime > TimeSpan.FromSeconds(4))
+                {
+                    ModEntry.Instance.LogInfo($"Recipe cache report:  Hits: {ObjectMachine.cacheHits}  Misses: {ObjectMachine.cacheMisses}  Count: {ObjectMachine.isKnownHash.Count}");
+                    ObjectMachine.lastReportTime = DateTime.Now;
+                }
+            }
+
+            int inventoryHash = 0;
+            // ReSharper disable once ForCanBeConvertedToForeach -- this kind of loop is faster.
+            for (int i = 0; i < storage.UnsafeInventory.Count; ++i)
+            {
+                var item = storage.UnsafeInventory[i];
+                if (item != null && !isShinyTest(item))
+                {
+                    // note that the order of items in the chest does not matter for the main computation,
+                    // so it's not important to do shifts or adds of inventoryHash
+                    inventoryHash ^= item.QualifiedItemId.GetHashCode() ^ item.Quality ^ (item.Stack << 4);
+                }
+            }
+
+            if (ObjectMachine.isKnownHash.Contains((this.Machine.QualifiedItemId, inventoryHash)))
+            {
+                ++ObjectMachine.cacheHits;
+                return null;
+            }
+
+            ++ObjectMachine.cacheMisses;
+            if (ObjectMachine.isKnownHash.Count > 20000)
+            {
+                // This hash will get filled up with dead data.  Once you add/remove something from a chest,
+                // it'll be a rare day indeed when it gets back to the state it was in before.  We could
+                // perhaps create a means to detect these changes, but just wiping it every so often
+                // seems like a safer play.
+                ObjectMachine.isKnownHash.Clear();
             }
 
             var machineData = this.Machine.GetMachineData();
@@ -99,6 +144,7 @@ namespace NermNermNerm.Junimatic
             {
                 if (!MachineDataUtility.HasAdditionalRequirements(sourceInventory, machineData.AdditionalConsumedItems, out _))
                 {
+                    ObjectMachine.isKnownHash.Add((this.Machine.QualifiedItemId, inventoryHash));
                     return null;
                 }
 
@@ -155,6 +201,8 @@ namespace NermNermNerm.Junimatic
             {
                 StardewValley.Object.autoLoadFrom = oldAutoLoadFrom;
             }
+
+            ObjectMachine.isKnownHash.Add((this.Machine.QualifiedItemId, inventoryHash));
             return null;
         }
 
