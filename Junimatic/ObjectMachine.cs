@@ -81,11 +81,13 @@ namespace NermNermNerm.Junimatic
         /// <inheritdoc/>>
         protected override IReadOnlyList<EstimatedProduct> EstimatedProducts => [this.HeldObjectToEstimatedProduct(this.Machine.heldObject.Value)];
 
-        private static HashSet<(string machineId, int inventoryHash)> isKnownHash = new();
+        private static readonly HashSet<(string machineId, int inventoryHash)> isKnownHash = new();
 
         private static int cacheHits;
         private static int cacheMisses;
-        private static DateTime lastReportTime = DateTime.MinValue;
+
+        public static string CacheReportTelemetry =>
+            IF($"Recipe cache report:  Hits: {ObjectMachine.cacheHits}  Misses: {ObjectMachine.cacheMisses}  Count: {ObjectMachine.isKnownHash.Count}");
 
         /// <inheritdoc/>>
         public override List<Item>? GetRecipeFromChest(GameStorage storage, Func<Item, bool> isShinyTest)
@@ -97,12 +99,6 @@ namespace NermNermNerm.Junimatic
 
             if (((ObjectMachine.cacheHits + ObjectMachine.cacheMisses) & 0x3ff) == 0x3ff)
             {
-                var now = DateTime.Now;
-                if (now - ObjectMachine.lastReportTime > TimeSpan.FromSeconds(4))
-                {
-                    ModEntry.Instance.LogInfo($"Recipe cache report:  Hits: {ObjectMachine.cacheHits}  Misses: {ObjectMachine.cacheMisses}  Count: {ObjectMachine.isKnownHash.Count}");
-                    ObjectMachine.lastReportTime = DateTime.Now;
-                }
             }
 
             int inventoryHash = 0;
