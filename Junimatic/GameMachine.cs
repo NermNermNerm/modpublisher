@@ -44,7 +44,7 @@ namespace NermNermNerm.Junimatic
 
         /// <summary>
         ///   Returns an estimate (possibly a perfectly accurate one) of the result of a call to <see cref="GetProducts"/>.
-        ///   It is meant for use with machines that 
+        ///   It is meant for use with machines that
         /// </summary>
         protected abstract IReadOnlyList<EstimatedProduct> EstimatedProducts { get; }
 
@@ -87,5 +87,7 @@ namespace NermNermNerm.Junimatic
         ///   Returns true if the machine has a recipe that the Junimo can do.
         /// </summary>
         public abstract bool IsCompatibleWithJunimo(JunimoType projectType);
+
+        public abstract string MachineTypeId { get; }
     }
 }

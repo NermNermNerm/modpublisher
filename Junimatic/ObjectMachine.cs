@@ -101,18 +101,7 @@ namespace NermNermNerm.Junimatic
             {
             }
 
-            int inventoryHash = 0;
-            // ReSharper disable once ForCanBeConvertedToForeach -- this kind of loop is faster.
-            for (int i = 0; i < storage.UnsafeInventory.Count; ++i)
-            {
-                var item = storage.UnsafeInventory[i];
-                if (item != null && !isShinyTest(item))
-                {
-                    // note that the order of items in the chest does not matter for the main computation,
-                    // so it's not important to do shifts or adds of inventoryHash
-                    inventoryHash ^= item.QualifiedItemId.GetHashCode() ^ item.Quality ^ (item.Stack << 4);
-                }
-            }
+            int inventoryHash = storage.GetInventoryHash(isShinyTest);
 
             if (ObjectMachine.isKnownHash.Contains((this.Machine.QualifiedItemId, inventoryHash)))
             {
@@ -320,6 +309,8 @@ namespace NermNermNerm.Junimatic
 
             return false;
         }
+
+        public override string MachineTypeId => this.Machine.QualifiedItemId;
 
         private bool IsManualFeedMachine => this.Machine.ItemId == "21"; // Crystalarium
 

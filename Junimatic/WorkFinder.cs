@@ -52,9 +52,9 @@ namespace NermNermNerm.Junimatic
 
             mod.Helper.Events.GameLoop.TimeChanged += (sender, args) =>
             {
-                if (this.numFindProjectCalls > 0)
+                if (this.numDoJunimosCalls > 0)
                 {
-                    this.LogInfo($"FindProject Telemetry -- DoJunimos max: {this.maxDoJunimosTime.Milliseconds}ms avg: {this.totalDoJunimosTime.Milliseconds/this.numDoJunimosCalls}ms  FindProject max: {this.maxFindProjectTime.Milliseconds}ms avg: {this.totalFindProjectTime.Milliseconds/this.numFindProjectCalls}ms machines: {this.maxMachines} chests: {this.maxChests} tiles: {this.maxVisitedTiles} ObjectMachine cache report: {ObjectMachine.CacheReportTelemetry}");
+                    this.LogInfo($"DoJunimos Telemetry -- DoJunimos max: {this.maxDoJunimosTime.Milliseconds}ms avg: {this.totalDoJunimosTime.Milliseconds/this.numDoJunimosCalls}ms  FindProject max: {this.maxFindProjectTime.Milliseconds}ms avg: {(this.numFindProjectCalls == 0 ? -1 : this.totalFindProjectTime.Milliseconds/this.numFindProjectCalls)}ms machines: {this.maxMachines} chests: {this.maxChests} tiles: {this.maxVisitedTiles} ObjectMachine cache report: {ObjectMachine.CacheReportTelemetry}");
                     this.maxMachines = 0;
                     this.maxChests = 0;
                     this.maxVisitedTiles = 0;
@@ -318,6 +318,7 @@ namespace NermNermNerm.Junimatic
             return result;
         }
 
+        private readonly HashSet<(string machineId, int inventoryHash)> isKnownHash = new();
 
         private bool TryDoAutomationsForLocation(GameLocation location, JunimoType projectType, Func<Item, bool> isShinyTest)
         {
@@ -358,11 +359,14 @@ namespace NermNermNerm.Junimatic
                 {
                     foreach (var chest in network.Chests)
                     {
-                        if (emptyMachine.FillMachineFromChest(chest, isShinyTest))
+                        int inventoryHash = chest.GetInventoryHash(isShinyTest);
+                        if (!this.isKnownHash.Contains((emptyMachine.MachineTypeId, inventoryHash)) && emptyMachine.FillMachineFromChest(chest, isShinyTest))
                         {
                             this.LogTrace($"{Game1.timeOfDay} Automatic machine fill of {emptyMachine} on {location.Name} from {chest}");
                             return true;
                         }
+
+                        this.isKnownHash.Add((emptyMachine.MachineTypeId, inventoryHash));
                     }
                 }
 
