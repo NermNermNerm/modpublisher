@@ -433,7 +433,11 @@ namespace NermNermNerm.Junimatic
                                 }
                             }
                         }
+
+                        if (isCompatible) break;
                     }
+
+                    if (isCompatible) break;
                 }
 
                 if (isCompatible)
