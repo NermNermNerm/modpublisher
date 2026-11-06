@@ -241,8 +241,7 @@ namespace NermNermNerm.Junimatic
             }
         }
 
-        private static Dictionary<string,bool> cachedCompatList = new Dictionary<string,bool>();
-
+        private static readonly Dictionary<string,HashSet<JunimoType>> cachedCompatList = new();
 
         private static readonly string[][] tags = [
             [I("category_minerals"), I("category_gem"), I("bone_item"), I("ore_item")],
@@ -256,8 +255,8 @@ namespace NermNermNerm.Junimatic
 
         private static int[][] categories = [
             [StardewValley.Object.GemCategory, StardewValley.Object.mineralsCategory, StardewValley.Object.metalResources, StardewValley.Object.monsterLootCategory],
-            [StardewValley.Object.EggCategory, StardewValley.Object.MilkCategory, StardewValley.Object.meatCategory, StardewValley.Object.sellAtPierresAndMarnies /* wool, duck feather, etc. */, StardewValley.Object.artisanGoodsCategory, StardewValley.Object.CookingCategory],
-            [StardewValley.Object.VegetableCategory, StardewValley.Object.FruitsCategory, StardewValley.Object.SeedsCategory, StardewValley.Object.flowersCategory, StardewValley.Object.fertilizerCategory, StardewValley.Object.artisanGoodsCategory],
+            [StardewValley.Object.EggCategory, StardewValley.Object.MilkCategory, StardewValley.Object.meatCategory, StardewValley.Object.sellAtPierresAndMarnies /* wool, duck feather, etc. */, StardewValley.Object.CookingCategory],
+            [StardewValley.Object.VegetableCategory, StardewValley.Object.FruitsCategory, StardewValley.Object.SeedsCategory, StardewValley.Object.flowersCategory, StardewValley.Object.fertilizerCategory],
             [StardewValley.Object.junkCategory, StardewValley.Object.baitCategory, StardewValley.Object.sellAtFishShopCategory],
             [StardewValley.Object.buildingResources],
             []
@@ -274,17 +273,15 @@ namespace NermNermNerm.Junimatic
         /// </summary>
         public override bool IsCompatibleWithJunimo(JunimoType projectType)
         {
-            string cacheKey = $"{this.Machine.ItemId}:{projectType}";
-            if (cachedCompatList.TryGetValue(cacheKey, out bool result))
+            string cacheKey = this.Machine.ItemId;
+            if (!cachedCompatList.TryGetValue(cacheKey, out var compatibleJunimoList))
             {
-                return result;
+                compatibleJunimoList = this.GetCompatibleJunimosByOutputRules();
+                ObjectMachine.cachedCompatList.Add(cacheKey, compatibleJunimoList);
             }
-
-            bool? noCacheResult = this.IsCompatViaMachineOutputRule(projectType);
-            if (noCacheResult.HasValue)
+            if (compatibleJunimoList.Count > 0)
             {
-                cachedCompatList[cacheKey] = noCacheResult.Value;
-                return noCacheResult.Value;
+                return compatibleJunimoList.Contains(projectType);
             }
 
             // A common cause of the rule-based system to not work is machines that
@@ -324,7 +321,7 @@ namespace NermNermNerm.Junimatic
         ///   machine's rule data.  Often, the rule data is not conclusive - if that's the case, it returns null.
         /// </summary>
         [NoStrict]
-        private bool? IsCompatViaMachineOutputRule(JunimoType projectType)
+        private HashSet<JunimoType> GetCompatibleJunimosByOutputRules()
         {
             // The MachineData contains clues as to what the assignments should be, but it's definitely fuzzy.
             // The game's notion of "category" is largely a matter of taste and isn't really consistent, and
@@ -339,7 +336,8 @@ namespace NermNermNerm.Junimatic
             {
                 if (Enum.TryParse(modAssignment, true, out JunimoType junimoType))
                 {
-                    return projectType == junimoType;
+                    ModEntry.Instance.LogInfo($"JobAssignment: {this.Machine.DisplayName} can be handled by {junimoType} because of CustomData");
+                    return [junimoType];
                 }
                 else
                 {
@@ -352,58 +350,58 @@ namespace NermNermNerm.Junimatic
             switch (this.Machine.ItemId)
             {
                 case "12": // keg
-                    return projectType == JunimoType.Crops; // Otherwise it'll return true for Animals, because there's a recipe (forget which) that involves animal stuff.
+                    return [JunimoType.Crops]; // Otherwise it'll return true for Animals, because there's a recipe (forget which) that involves animal stuff.
                 case "25": // seed maker
-                    return projectType == JunimoType.Crops; // There's no data at all in its MachineData.
+                    return [JunimoType.Crops]; // Otherwise it'll return true for Animals, because there's a recipe (forget which) that involves animal stuff.
                 case "182": // Geode Crusher
-                    return projectType == JunimoType.Mining;
+                    return [JunimoType.Mining];
                 case "211": // wood chipper
-                    return projectType == JunimoType.Forestry; // Else it gets to thinking that fishing would work.
+                    return [JunimoType.Forestry]; // Else it gets to thinking that fishing would work.
                 case "10": // bee house
-                    return projectType == JunimoType.Animals; // no good data
+                    return [JunimoType.Animals]; // no good data
                 case "20": // recycling machine
-                    return projectType == JunimoType.Fishing; // It has a zillion outputs, so the data isn't a good guide.
+                    return [JunimoType.Fishing]; // It has a zillion outputs, so the data isn't a good guide.
                 case "154": // worm bin
                 case "DeluxeWormBin":
-                    return projectType == JunimoType.Fishing; // The output item makes it perfectly clear, but it's the only thing where OutputItem would add value.
+                    return [JunimoType.Fishing]; // The output item makes it perfectly clear, but it's the only thing where OutputItem would add value.
                 case "BaitMaker": // This seems like a dangerous machine since the use-case is so specialized that if it gets in the network, it's likely by accident.
-                    return false;
+                    return [];
                 case "710": // crab pot
-                    return projectType == JunimoType.Fishing; // There's no MachineData
+                    return [JunimoType.Fishing]; // There's no MachineData
                 case "231": // solar panel
                 case "9": // lightning rod
-                    return projectType == JunimoType.Mining; // no good data
+                    return [JunimoType.Mining]; // no good data
                 case "105": // tapper
                 case "264": // heavy tapper
                 case "MushroomLog":
-                    return projectType == JunimoType.Forestry; // no good data
+                    return [JunimoType.Forestry]; // no good data
                 case "Dehydrator":
-                    if (projectType == JunimoType.Forestry)
-                    {
-                        // The Data for this machine will return true for farming Junimos as well, but there's no
-                        // category for woodsy stuff and we're kinda blazing our own path with the idea that forestry
-                        // Junimos work mushrooms.
-                        return true;
-                    }
-                    break;
+                    // The Data for this machine will return true for farming Junimos as well, but there's no
+                    // category for woodsy stuff and we're kinda blazing our own path with the idea that forestry
+                    // Junimos work mushrooms.
+                    return [JunimoType.Forestry];
             }
 
-            // TODO: Add configurable special cases.
-
-
-            bool hasLegibleOutputRule = false;
-            if (machineData?.OutputRules is not null)
+            if (machineData?.OutputRules is null)
             {
+                ModEntry.Instance.LogInfoOnce($"JobAssignment: {this.Machine.DisplayName} - {this.Machine.ItemId} - cannot figure out its project type from the rules data");
+                return [];
+            }
+
+            var compatibleTypes = new HashSet<JunimoType>();
+            bool hasArtisanCategory = false;
+            foreach (var projectType in Enum.GetValues<JunimoType>())
+            {
+                bool isCompatible = false;
                 foreach (var rule in machineData.OutputRules)
                 {
                     foreach (var trigger in rule.Triggers ?? [])
                     {
-                        hasLegibleOutputRule |= trigger.RequiredTags is not null && trigger.RequiredTags.Any();
-                        hasLegibleOutputRule |= trigger.RequiredItemId is not null;
-
                         if (trigger.RequiredTags is not null && HasMatchingTag(projectType, trigger.RequiredTags))
                         {
-                            return true;
+                            ModEntry.Instance.LogInfo($"JobAssignment: {this.Machine.DisplayName} can be handled by {projectType} because of tags: {string.Join(',', trigger.RequiredTags)}");
+                            isCompatible = true;
+                            break;
                         }
 
                         if (trigger.RequiredItemId is not null)
@@ -415,7 +413,13 @@ namespace NermNermNerm.Junimatic
                             }
                             else if (IsCategoryCompatibleWithProject(projectType, itemData.Category))
                             {
-                                return true;
+                                ModEntry.Instance.LogInfo($"JobAssignment: {this.Machine.DisplayName} can be handled by {projectType} because of trigger category: {itemData.Category}");
+                                isCompatible = true;
+                                break;
+                            }
+                            else if (itemData.Category == StardewValley.Object.artisanGoodsCategory)
+                            {
+                                hasArtisanCategory = true;
                             }
                         }
                     }
@@ -434,15 +438,40 @@ namespace NermNermNerm.Junimatic
                                 }
                                 else if (IsCategoryCompatibleWithProject(projectType, itemData.Category))
                                 {
-                                    return true;
+                                    ModEntry.Instance.LogInfo($"JobAssignment: {this.Machine.DisplayName} can be handled by {projectType} because of OutputItem category: {itemData.Category}");
+                                    isCompatible = true;
+                                    break;
+                                }
+                                else if (itemData.Category == StardewValley.Object.artisanGoodsCategory)
+                                {
+                                    hasArtisanCategory = true;
                                 }
                             }
                         }
                     }
                 }
+
+                if (isCompatible)
+                {
+                    compatibleTypes.Add(projectType);
+                }
             }
 
-            return null;
+            if (compatibleTypes.Any())
+            {
+                ModEntry.Instance.LogInfo($"JobAssignment: {this.Machine.DisplayName} - {this.Machine.ItemId} projects: {string.Join(",", compatibleTypes)}");
+                return compatibleTypes;
+            }
+            else if (hasArtisanCategory)
+            {
+                ModEntry.Instance.LogInfo($"JobAssignment: {this.Machine.DisplayName} - {this.Machine.ItemId} doesn't have a clear distinguisher, but items are artisan, so going with Animals,Crops");
+                return [JunimoType.Animals, JunimoType.Crops];
+            }
+            else
+            {
+                ModEntry.Instance.LogWarning($"JobAssignment: {this.Machine.DisplayName} - {this.Machine.ItemId} doesn't have rules that give a clue as to which Junimo should work with it.  Junimos will collect items from it but will not add them.");
+                return [];
+            }
         }
 
         public override List<StardewValley.Item> GetProducts()
