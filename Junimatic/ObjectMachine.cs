@@ -97,11 +97,6 @@ namespace NermNermNerm.Junimatic
         /// <inheritdoc/>>
         public override List<Item>? GetRecipeFromChest(GameStorage storage, Func<Item, bool> isShinyTest)
         {
-            if (this.IsManualFeedMachine)
-            {
-                return null;
-            }
-
             if (((ObjectMachine.cacheHits + ObjectMachine.cacheMisses) & 0x3ff) == 0x3ff)
             {
             }
@@ -199,11 +194,6 @@ namespace NermNermNerm.Junimatic
         /// <inheritdoc/>>
         public override bool FillMachineFromChest(GameStorage storage, Func<Item, bool> isShinyTest)
         {
-            if (this.IsManualFeedMachine)
-            {
-                return false;
-            }
-
             // Don't attempt to load items into machines that don't accept any input
             // Check for is_machine to avoid breaking crab pots
             if (this.Machine.HasContextTag("is_machine") && !this.Machine.HasContextTag("machine_input"))
@@ -228,11 +218,6 @@ namespace NermNermNerm.Junimatic
         /// <inheritdoc/>>
         public override void FillMachineFromInventory(Inventory inventory)
         {
-            if (this.IsManualFeedMachine)
-            {
-                throw new InvalidOperationException(I("Animated Junimo was tasked to go to a manual-fill machine."));
-            }
-
             // This "attempt" should be a sure thing, as the recipe was concocted by the machine (so it's valid) and
             //  callers should be ensuring that the machine is in the idle state before calling.
             if (!this.Machine.AttemptAutoLoad(inventory, Game1.MasterPlayer))
@@ -314,8 +299,6 @@ namespace NermNermNerm.Junimatic
 
         public override string MachineTypeId => this.Machine.QualifiedItemId;
 
-        private bool IsManualFeedMachine => this.Machine.ItemId == "21"; // Crystalarium
-
         /// <summary>
         ///   Tries to determine if a machine is compatible with a particular type of junimo by looking at the
         ///   machine's rule data.  Often, the rule data is not conclusive - if that's the case, it returns null.
@@ -365,6 +348,8 @@ namespace NermNermNerm.Junimatic
                 case "DeluxeWormBin":
                     return [JunimoType.Fishing]; // The output item makes it perfectly clear, but it's the only thing where OutputItem would add value.
                 case "BaitMaker": // This seems like a dangerous machine since the use-case is so specialized that if it gets in the network, it's likely by accident.
+                    return [];
+                case "21": // Crystalarium
                     return [];
                 case "710": // crab pot
                     return [JunimoType.Fishing]; // There's no MachineData
