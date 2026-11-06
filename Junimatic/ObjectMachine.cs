@@ -81,13 +81,18 @@ namespace NermNermNerm.Junimatic
         /// <inheritdoc/>>
         protected override IReadOnlyList<EstimatedProduct> EstimatedProducts => [this.HeldObjectToEstimatedProduct(this.Machine.heldObject.Value)];
 
-        private static readonly HashSet<(string machineId, int inventoryHash)> isKnownHash = new();
+        private static readonly HashSet<(string machineId, int inventoryHash)> knownNoRecipeCache = new();
 
         private static int cacheHits;
         private static int cacheMisses;
 
         public static string CacheReportTelemetry =>
-            IF($"Recipe cache report:  Hits: {ObjectMachine.cacheHits}  Misses: {ObjectMachine.cacheMisses}  Count: {ObjectMachine.isKnownHash.Count}");
+            IF($"Recipe cache report:  Hits: {ObjectMachine.cacheHits}  Misses: {ObjectMachine.cacheMisses}  Count: {ObjectMachine.knownNoRecipeCache.Count}");
+
+        public static void OnSaveLoaded()
+        {
+            ObjectMachine.knownNoRecipeCache.Clear();
+        }
 
         /// <inheritdoc/>>
         public override List<Item>? GetRecipeFromChest(GameStorage storage, Func<Item, bool> isShinyTest)
@@ -103,20 +108,20 @@ namespace NermNermNerm.Junimatic
 
             int inventoryHash = storage.GetInventoryHash(isShinyTest);
 
-            if (ObjectMachine.isKnownHash.Contains((this.Machine.QualifiedItemId, inventoryHash)))
+            if (ObjectMachine.knownNoRecipeCache.Contains((this.Machine.QualifiedItemId, inventoryHash)))
             {
                 ++ObjectMachine.cacheHits;
                 return null;
             }
 
             ++ObjectMachine.cacheMisses;
-            if (ObjectMachine.isKnownHash.Count > 20000)
+            if (ObjectMachine.knownNoRecipeCache.Count > 20000)
             {
                 // This hash will get filled up with dead data.  Once you add/remove something from a chest,
                 // it'll be a rare day indeed when it gets back to the state it was in before.  We could
                 // perhaps create a means to detect these changes, but just wiping it every so often
                 // seems like a safer play.
-                ObjectMachine.isKnownHash.Clear();
+                ObjectMachine.knownNoRecipeCache.Clear();
             }
 
             var machineData = this.Machine.GetMachineData();
@@ -129,7 +134,7 @@ namespace NermNermNerm.Junimatic
             {
                 if (!MachineDataUtility.HasAdditionalRequirements(sourceInventory, machineData.AdditionalConsumedItems, out _))
                 {
-                    ObjectMachine.isKnownHash.Add((this.Machine.QualifiedItemId, inventoryHash));
+                    ObjectMachine.knownNoRecipeCache.Add((this.Machine.QualifiedItemId, inventoryHash));
                     return null;
                 }
 
@@ -187,7 +192,7 @@ namespace NermNermNerm.Junimatic
                 StardewValley.Object.autoLoadFrom = oldAutoLoadFrom;
             }
 
-            ObjectMachine.isKnownHash.Add((this.Machine.QualifiedItemId, inventoryHash));
+            ObjectMachine.knownNoRecipeCache.Add((this.Machine.QualifiedItemId, inventoryHash));
             return null;
         }
 

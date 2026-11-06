@@ -49,23 +49,32 @@ namespace NermNermNerm.Junimatic
             mod.Helper.Events.GameLoop.OneSecondUpdateTicked += this.GameLoop_OneSecondUpdateTicked;
             mod.Helper.Events.GameLoop.DayEnding += this.GameLoop_DayEnding;
             mod.Helper.Events.GameLoop.DayStarted += this.GameLoop_DayStarted;
+            mod.Helper.Events.GameLoop.TimeChanged += this.GameLoop_OnTimeChanged;
+            mod.Helper.Events.GameLoop.SaveLoaded += this.GameLoop_OnSaveLoaded;
+        }
 
-            mod.Helper.Events.GameLoop.TimeChanged += (sender, args) =>
+        private void GameLoop_OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
+        {
+            this.knownNoRecipeCombinationsCache.Clear();
+            ObjectMachine.OnSaveLoaded();
+        }
+
+        private void GameLoop_OnTimeChanged(object? sender, TimeChangedEventArgs e)
+        {
+            if (this.numDoJunimosCalls > 0)
             {
-                if (this.numDoJunimosCalls > 0)
-                {
-                    this.LogInfo($"DoJunimos Telemetry -- DoJunimos max: {this.maxDoJunimosTime.Milliseconds}ms avg: {this.totalDoJunimosTime.Milliseconds/this.numDoJunimosCalls}ms  FindProject max: {this.maxFindProjectTime.Milliseconds}ms avg: {(this.numFindProjectCalls == 0 ? -1 : this.totalFindProjectTime.Milliseconds/this.numFindProjectCalls)}ms machines: {this.maxMachines} chests: {this.maxChests} tiles: {this.maxVisitedTiles} ObjectMachine cache report: {ObjectMachine.CacheReportTelemetry}");
-                    this.maxMachines = 0;
-                    this.maxChests = 0;
-                    this.maxVisitedTiles = 0;
-                    this.numFindProjectCalls = 0;
-                    this.totalFindProjectTime = new TimeSpan(0);
-                    this.maxFindProjectTime = new TimeSpan(0);
-                    this.numDoJunimosCalls = 0;
-                    this.totalDoJunimosTime = new TimeSpan(0);
-                    this.maxDoJunimosTime = new TimeSpan(0);
-                }
-            };
+                this.LogInfo(
+                    $"DoJunimos Telemetry -- DoJunimos max: {this.maxDoJunimosTime.Milliseconds}ms avg: {this.totalDoJunimosTime.Milliseconds / this.numDoJunimosCalls}ms  FindProject max: {this.maxFindProjectTime.Milliseconds}ms avg: {(this.numFindProjectCalls == 0 ? -1 : this.totalFindProjectTime.Milliseconds / this.numFindProjectCalls)}ms machines: {this.maxMachines} chests: {this.maxChests} tiles: {this.maxVisitedTiles} ObjectMachine cache report: {ObjectMachine.CacheReportTelemetry}");
+                this.maxMachines = 0;
+                this.maxChests = 0;
+                this.maxVisitedTiles = 0;
+                this.numFindProjectCalls = 0;
+                this.totalFindProjectTime = new TimeSpan(0);
+                this.maxFindProjectTime = new TimeSpan(0);
+                this.numDoJunimosCalls = 0;
+                this.totalDoJunimosTime = new TimeSpan(0);
+                this.maxDoJunimosTime = new TimeSpan(0);
+            }
         }
 
         private void GameLoop_DayStarted(object? sender, StardewModdingAPI.Events.DayStartedEventArgs e)
@@ -318,7 +327,7 @@ namespace NermNermNerm.Junimatic
             return result;
         }
 
-        private readonly HashSet<(string machineId, int inventoryHash)> isKnownHash = new();
+        private readonly HashSet<(string machineId, int inventoryHash)> knownNoRecipeCombinationsCache = new();
 
         private bool TryDoAutomationsForLocation(GameLocation location, JunimoType projectType, Func<Item, bool> isShinyTest)
         {
@@ -360,13 +369,13 @@ namespace NermNermNerm.Junimatic
                     foreach (var chest in network.Chests)
                     {
                         int inventoryHash = chest.GetInventoryHash(isShinyTest);
-                        if (!this.isKnownHash.Contains((emptyMachine.MachineTypeId, inventoryHash)) && emptyMachine.FillMachineFromChest(chest, isShinyTest))
+                        if (!this.knownNoRecipeCombinationsCache.Contains((emptyMachine.MachineTypeId, inventoryHash)) && emptyMachine.FillMachineFromChest(chest, isShinyTest))
                         {
                             this.LogTrace($"{Game1.timeOfDay} Automatic machine fill of {emptyMachine} on {location.Name} from {chest}");
                             return true;
                         }
 
-                        this.isKnownHash.Add((emptyMachine.MachineTypeId, inventoryHash));
+                        this.knownNoRecipeCombinationsCache.Add((emptyMachine.MachineTypeId, inventoryHash));
                     }
                 }
 
