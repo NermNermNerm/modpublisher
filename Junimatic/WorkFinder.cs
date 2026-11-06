@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using Microsoft.Xna.Framework;
 using StardewModdingAPI;
+using StardewModdingAPI.Events;
 using StardewValley;
 using StardewValley.TokenizableStrings;
 using static NermNermNerm.Stardew.LocalizeFromSource.SdvLocalize;
@@ -22,6 +23,17 @@ namespace NermNermNerm.Junimatic
         private bool isDayStarted = false;
         private bool haveLookedForRaisins = false;
 
+        // telemetry data
+        private int maxMachines;
+        private int maxChests;
+        private int maxVisitedTiles;
+        private int numFindProjectCalls;
+        private TimeSpan totalFindProjectTime;
+        private TimeSpan maxFindProjectTime;
+        private int numDoJunimosCalls;
+        private TimeSpan totalDoJunimosTime;
+        private TimeSpan maxDoJunimosTime;
+
         public bool AreJunimosRaisinPowered { get; private set; }
 
         private static readonly Point[] walkableDirections = [new Point(-1, 0), new Point(1, 0), new Point(0, -1), new Point(0, 1)];
@@ -37,6 +49,32 @@ namespace NermNermNerm.Junimatic
             mod.Helper.Events.GameLoop.OneSecondUpdateTicked += this.GameLoop_OneSecondUpdateTicked;
             mod.Helper.Events.GameLoop.DayEnding += this.GameLoop_DayEnding;
             mod.Helper.Events.GameLoop.DayStarted += this.GameLoop_DayStarted;
+            mod.Helper.Events.GameLoop.TimeChanged += this.GameLoop_OnTimeChanged;
+            mod.Helper.Events.GameLoop.SaveLoaded += this.GameLoop_OnSaveLoaded;
+        }
+
+        private void GameLoop_OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
+        {
+            this.knownNoRecipeCombinationsCache.Clear();
+            ObjectMachine.OnSaveLoaded();
+        }
+
+        private void GameLoop_OnTimeChanged(object? sender, TimeChangedEventArgs e)
+        {
+            if (this.numDoJunimosCalls > 0)
+            {
+                this.LogInfo(
+                    $"DoJunimos Telemetry -- DoJunimos max: {this.maxDoJunimosTime.Milliseconds}ms avg: {this.totalDoJunimosTime.Milliseconds / this.numDoJunimosCalls}ms  FindProject max: {this.maxFindProjectTime.Milliseconds}ms avg: {(this.numFindProjectCalls == 0 ? -1 : this.totalFindProjectTime.Milliseconds / this.numFindProjectCalls)}ms machines: {this.maxMachines} chests: {this.maxChests} tiles: {this.maxVisitedTiles} ObjectMachine cache report: {ObjectMachine.CacheReportTelemetry}");
+                this.maxMachines = 0;
+                this.maxChests = 0;
+                this.maxVisitedTiles = 0;
+                this.numFindProjectCalls = 0;
+                this.totalFindProjectTime = new TimeSpan(0);
+                this.maxFindProjectTime = new TimeSpan(0);
+                this.numDoJunimosCalls = 0;
+                this.totalDoJunimosTime = new TimeSpan(0);
+                this.maxDoJunimosTime = new TimeSpan(0);
+            }
         }
 
         private void GameLoop_DayStarted(object? sender, StardewModdingAPI.Events.DayStartedEventArgs e)
@@ -104,7 +142,14 @@ namespace NermNermNerm.Junimatic
                 return;
             }
 
+            var timer = Stopwatch.StartNew();
             this.DoJunimos(true);
+            this.numDoJunimosCalls += 1;
+            this.totalDoJunimosTime += timer.Elapsed;
+            if (timer.Elapsed > this.maxDoJunimosTime)
+            {
+                this.maxDoJunimosTime = timer.Elapsed;
+            }
         }
 
         private void DoJunimos(bool isAutomationInterval)
@@ -171,7 +216,14 @@ namespace NermNermNerm.Junimatic
                     {
                         if (numAvailableJunimos[junimoType] > 0)
                         {
+                            var w = Stopwatch.StartNew();
                             var project = this.FindProject(portal, junimoType, null, isShinyTest);
+                            this.numFindProjectCalls += 1;
+                            this.totalFindProjectTime += w.Elapsed;
+                            if (w.Elapsed > this.maxFindProjectTime)
+                            {
+                                this.maxFindProjectTime = w.Elapsed;
+                            }
                             if (project is not null)
                             {
                                 this.LogTrace($"Starting Animated Junimo for {project}");
@@ -275,6 +327,7 @@ namespace NermNermNerm.Junimatic
             return result;
         }
 
+        private readonly HashSet<(string machineId, int inventoryHash)> knownNoRecipeCombinationsCache = new();
 
         private bool TryDoAutomationsForLocation(GameLocation location, JunimoType projectType, Func<Item, bool> isShinyTest)
         {
@@ -315,11 +368,14 @@ namespace NermNermNerm.Junimatic
                 {
                     foreach (var chest in network.Chests)
                     {
-                        if (emptyMachine.FillMachineFromChest(chest, isShinyTest))
+                        int inventoryHash = chest.GetInventoryHash(isShinyTest);
+                        if (!this.knownNoRecipeCombinationsCache.Contains((emptyMachine.MachineTypeId, inventoryHash)) && emptyMachine.FillMachineFromChest(chest, isShinyTest))
                         {
                             this.LogTrace($"{Game1.timeOfDay} Automatic machine fill of {emptyMachine} on {location.Name} from {chest}");
                             return true;
                         }
+
+                        this.knownNoRecipeCombinationsCache.Add((emptyMachine.MachineTypeId, inventoryHash));
                     }
                 }
 
@@ -689,6 +745,11 @@ namespace NermNermNerm.Junimatic
                 // machines on diagonals.
             }
 
+            // Only collecting stats for complete misses simplifies the code and doesn't detract much from the quality of
+            // the data we get out.
+            this.maxVisitedTiles = Math.Max(this.maxVisitedTiles, visitedTiles.Count);
+            this.maxChests = Math.Max(this.maxChests, knownChests.Count);
+            this.maxMachines = Math.Max(this.maxMachines, fullMachines.Count + emptyMachines.Count);
             return null;
         }
 

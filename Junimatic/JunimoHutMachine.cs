@@ -40,6 +40,8 @@ namespace NermNermNerm.Junimatic
         public override bool IsCompatibleWithJunimo(JunimoType projectType) => true; // Doesn't matter
         public override bool IsStillPresent => true; // If the user picks up the portal, the Junimo pretends like it's still there.
 
+        public override string MachineTypeId => UnlockPortal.JunimoPortalQiid;
+
         public override string ToString()
         {
             var hut = (StardewValley.Object)(this.GameObject);

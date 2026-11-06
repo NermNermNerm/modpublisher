@@ -45,5 +45,7 @@ namespace NermNermNerm.Junimatic
         {
             return IF($"{this.Building.buildingType} at {this.Building.tileX.Value},{this.Building.tileY.Value}");
         }
+
+        public override string MachineTypeId => this.Building.textureName();
     }
 }

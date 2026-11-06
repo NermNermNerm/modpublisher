@@ -49,5 +49,7 @@ namespace NermNermNerm.Junimatic
             this.FruitTree.fruit.Clear();
             return result;
         }
+
+        public override string MachineTypeId => this.FruitTree.textureName;
     }
 }

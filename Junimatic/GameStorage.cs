@@ -275,6 +275,24 @@ namespace NermNermNerm.Junimatic
             return true;
         }
 
+        public int GetInventoryHash(Func<Item, bool> isShinyTest)
+        {
+            int inventoryHash = 0;
+            // ReSharper disable once ForCanBeConvertedToForeach -- this kind of loop is faster.
+            for (int i = 0; i < this.UnsafeInventory.Count; ++i)
+            {
+                var item = this.UnsafeInventory[i];
+                if (item != null && !isShinyTest(item))
+                {
+                    // note that the order of items in the chest does not matter for the main computation,
+                    // so it's not important to do shifts or adds of inventoryHash
+                    inventoryHash ^= item.QualifiedItemId.GetHashCode() ^ item.Quality ^ (item.Stack << 4);
+                }
+            }
+
+            return inventoryHash;
+        }
+
         /// <summary>
         ///   Gets the contents of the chest.
         /// </summary>
