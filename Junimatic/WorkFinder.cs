@@ -571,13 +571,12 @@ namespace NermNermNerm.Junimatic
             return networks;
         }
 
-        public JunimoAssignment? FindProject(StardewValley.Object portal, JunimoType projectType, JunimoShuffler? forJunimo)
-            => this.FindProject(portal, projectType, forJunimo, this.mod.JunimoStatusDialog.GetIsShinyTest());
-
-        public JunimoAssignment? FindProject(StardewValley.Object portal, JunimoType projectType, JunimoShuffler? forJunimo, Func<Item,bool> isShinyTest)
+        public JunimoAssignment? FindProject(StardewValley.Object portal, JunimoType projectType, JunimoShuffler forJunimo)
         {
-            // This duplicates the logic in BuildNetwork, except that it's trying to find the closest path and
-            // it stops as soon as it cooks up something to do.
+            var isShinyTest = this.mod.JunimoStatusDialog.GetIsShinyTest();
+            // This duplicates the logic in BuildNetwork, except that it's trying to find the closest thing it can do
+            // starting at the place where it's currently at.  Really, it's a holdover from a prior age when this method
+            // was doing all the animated junimos.
 
             var location = portal.Location;
             // These lists are all in order of nearest to farthest from the portal
@@ -589,10 +588,7 @@ namespace NermNermNerm.Junimatic
             var map = new GameMap(location);
 
             map.GetStartingInfo(portal, out var startingPoints, out var walkableFloorTypes);
-            if (forJunimo is not null)
-            {
-                startingPoints = new List<Point>() { forJunimo.Tile.ToPoint() };
-            }
+            startingPoints = [forJunimo.Tile.ToPoint()];
 
             HashSet<object> busyMachines = portal.Location.characters
                 .OfType<JunimoShuffler>()
@@ -799,7 +795,7 @@ namespace NermNermNerm.Junimatic
 
             foreach (var machine in network.Machines[projectType])
             {
-                if (busyMachines.Contains(machine))
+                if (busyMachines.Contains(machine.GameObject))
                 {
                 }
                 else if (machine.IsAwaitingPickup)
