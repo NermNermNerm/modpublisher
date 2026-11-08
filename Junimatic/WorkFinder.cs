@@ -51,32 +51,22 @@ namespace NermNermNerm.Junimatic
             mod.Helper.Events.GameLoop.DayEnding += this.GameLoop_DayEnding;
             mod.Helper.Events.GameLoop.DayStarted += this.GameLoop_DayStarted;
             mod.Helper.Events.GameLoop.TimeChanged += this.GameLoop_OnTimeChanged;
-            mod.Helper.Events.GameLoop.SaveLoaded += this.GameLoop_OnSaveLoaded;
 
             mod.Helper.Events.World.ObjectListChanged += (sender, args) =>
             {
                 this.cachedNetworks.Remove(args.Location); // Invalidate the cache so it gets rebuilt next tick
-                this.LogWarning($"ObjectListChanged: {args.Location.Name}");
+                this.LogTrace($"Invalidating network cache for {args.Location.Name} due to ObjectListChanged event (possible new/removed machines, new huts, etc.)");
             };
             mod.Helper.Events.World.FurnitureListChanged += (sender, args) =>
             {
-                this.LogWarning($"FurnitureListChanged: {args.Location.Name}");
+                this.cachedNetworks.Remove(args.Location); // Invalidate the cache so it gets rebuilt next tick
+                this.LogTrace($"Invalidating network cache for {args.Location.Name} due to Furniture change (paths might be obstructed/cleared)");
             };
             mod.Helper.Events.World.TerrainFeatureListChanged += (sender, args) =>
             {
                 this.cachedNetworks.Remove(args.Location); // Invalidate the cache so it gets rebuilt next tick
-                this.LogWarning($"TerrainFeatureListChanged: {args.Location.Name}"); // flooring
+                this.LogTrace($"Invalidating network cache for {args.Location.Name} due to TerrainFeatureListChanged (flooring might have changed)");
             };
-            mod.Helper.Events.World.ChestInventoryChanged += (sender, args) =>
-            {
-                this.LogWarning($"ChestInventoryChanged: {args.Location.Name}"); // JunimoChests?
-            };
-        }
-
-        private void GameLoop_OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
-        {
-            this.knownNoRecipeCombinationsCache.Clear();
-            ObjectMachine.OnSaveLoaded();
         }
 
         private void GameLoop_OnTimeChanged(object? sender, TimeChangedEventArgs e)
@@ -84,7 +74,7 @@ namespace NermNermNerm.Junimatic
             if (this.numDoJunimosCalls > 0)
             {
                 this.LogInfo(
-                    $"DoJunimos Telemetry -- DoJunimos max: {(int)this.maxDoJunimosTime.TotalMilliseconds}ms avg: {(int)this.totalDoJunimosTime.TotalMilliseconds / this.numDoJunimosCalls}ms  FindProject max: {this.maxFindProjectTime.Milliseconds}ms avg: {(this.numFindProjectCalls == 0 ? -1 : this.totalFindProjectTime.Milliseconds / this.numFindProjectCalls)}ms machines: {this.maxMachines} chests: {this.maxChests} tiles: {this.maxVisitedTiles} ObjectMachine cache report: {ObjectMachine.CacheReportTelemetry}");
+                    $"DoJunimos Telemetry -- DoJunimos max: {(int)this.maxDoJunimosTime.TotalMilliseconds}ms avg: {(int)this.totalDoJunimosTime.TotalMilliseconds / this.numDoJunimosCalls}ms  FindProject max: {this.maxFindProjectTime.Milliseconds}ms avg: {(this.numFindProjectCalls == 0 ? -1 : this.totalFindProjectTime.Milliseconds / this.numFindProjectCalls)}ms machines: {this.maxMachines} chests: {this.maxChests} tiles: {this.maxVisitedTiles}");
                 this.maxMachines = 0;
                 this.maxChests = 0;
                 this.maxVisitedTiles = 0;
@@ -338,8 +328,6 @@ namespace NermNermNerm.Junimatic
             return result;
         }
 
-        private readonly HashSet<(string machineId, int inventoryHash)> knownNoRecipeCombinationsCache = new();
-
         private bool TryDoAutomationsForLocation(GameLocation location, JunimoType projectType, Func<Item, bool> isShinyTest)
         {
             if (!this.cachedNetworks.TryGetValue(location, out var networks))
@@ -374,19 +362,21 @@ namespace NermNermNerm.Junimatic
 
                 var machines = network.Machines[projectType];
 
+                HashSet<string> unfillableMachineIds = new();
                 // Try and load a machine
                 foreach (var emptyMachine in machines.Where(m => m.IsIdle && m.IsCompatibleWithJunimo(projectType)))
                 {
-                    foreach (var chest in network.Chests)
+                    if (!unfillableMachineIds.Contains(emptyMachine.MachineTypeId))
                     {
-                        int inventoryHash = chest.GetInventoryHash(isShinyTest);
-                        if (!this.knownNoRecipeCombinationsCache.Contains((emptyMachine.MachineTypeId, inventoryHash)) && emptyMachine.FillMachineFromChest(chest, isShinyTest))
+                        foreach (var chest in network.Chests)
                         {
-                            this.LogTrace($"{Game1.timeOfDay} Automatic machine fill of {emptyMachine} on {location.Name} from {chest}");
-                            return true;
+                            if (emptyMachine.FillMachineFromChest(chest, isShinyTest))
+                            {
+                                this.LogTrace($"{Game1.timeOfDay} Automatic machine fill of {emptyMachine} on {location.Name} from {chest}");
+                                return true;
+                            }
                         }
-
-                        this.knownNoRecipeCombinationsCache.Add((emptyMachine.MachineTypeId, inventoryHash));
+                        unfillableMachineIds.Add(emptyMachine.MachineTypeId);
                     }
                 }
 
@@ -458,11 +448,7 @@ namespace NermNermNerm.Junimatic
                 result.AddRange(WorkFinder.TryBuildNetworks(map, portal));
             }
 
-            long elapsedMs = watch.ElapsedMilliseconds;
-            if (elapsedMs > 0)
-            {
-                this.LogInfo($"WorkFinder.BuildNetwork for {location.Name} took {watch.ElapsedMilliseconds}ms");
-            }
+            this.LogInfo($"WorkFinder.BuildNetwork for {location.Name} took {watch.ElapsedMilliseconds}ms");
             return result;
         }
 
@@ -791,8 +777,7 @@ namespace NermNermNerm.Junimatic
                 .Where(machine => machine is not null)
                 .Select(machine => machine!)
                 .ToHashSet();
-
-
+            HashSet<string> unfillableMachineIds = new();
             foreach (var machine in network.Machines[projectType])
             {
                 if (busyMachines.Contains(machine.GameObject))
@@ -808,7 +793,7 @@ namespace NermNermNerm.Junimatic
                         return new JunimoAssignment(projectType, location, network.hut, network.startingTile, machine, preferredChest, itemsToRemoveFromChest: null);
                     }
                 }
-                else if (machine.IsIdle)
+                else if (machine.IsIdle && !unfillableMachineIds.Contains(machine.MachineTypeId))
                 {
                     // Try and find a chest to supply it from
                     foreach (var sourceChest in network.Chests)
@@ -819,6 +804,7 @@ namespace NermNermNerm.Junimatic
                             return new JunimoAssignment(projectType, location, network.hut, network.startingTile, sourceChest, machine, inputs);
                         }
                     }
+                    unfillableMachineIds.Add(machine.MachineTypeId);
                 }
             }
 
