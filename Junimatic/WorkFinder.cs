@@ -14,6 +14,13 @@ namespace NermNermNerm.Junimatic
 {
     public class WorkFinder : ISimpleLog
     {
+        private record class MachineNetwork(
+            IReadOnlyDictionary<JunimoType, IReadOnlyList<GameMachine>> Machines,
+            IReadOnlyList<GameStorage> Chests,
+            StardewValley.Object hut,
+            Point startingTile,
+            IReadOnlyList<Vector2> corners);
+
         private ModEntry mod = null!;
         private readonly Dictionary<GameLocation, IReadOnlyList<MachineNetwork>> cachedNetworks = new();
         private readonly HashSet<GameLocation> alreadyDisabledLocations = new HashSet<GameLocation>();
@@ -25,15 +32,10 @@ namespace NermNermNerm.Junimatic
         private bool haveLookedForRaisins = false;
 
         // telemetry data
-        private int maxMachines;
-        private int maxChests;
-        private int maxVisitedTiles;
-        private int numFindProjectCalls;
-        private TimeSpan totalFindProjectTime;
-        private TimeSpan maxFindProjectTime;
         private int numDoJunimosCalls;
         private TimeSpan totalDoJunimosTime;
         private TimeSpan maxDoJunimosTime;
+        private TimeSpan minDoJunimosTime = TimeSpan.MaxValue;
 
         public bool AreJunimosRaisinPowered { get; private set; }
 
@@ -71,19 +73,39 @@ namespace NermNermNerm.Junimatic
 
         private void GameLoop_OnTimeChanged(object? sender, TimeChangedEventArgs e)
         {
-            if (this.numDoJunimosCalls > 0)
+            if (this.numDoJunimosCalls > 0 && ((Game1.timeOfDay % 100) % 30) == 0)
             {
                 this.LogInfo(
-                    $"DoJunimos Telemetry -- DoJunimos max: {(int)this.maxDoJunimosTime.TotalMilliseconds}ms avg: {(int)this.totalDoJunimosTime.TotalMilliseconds / this.numDoJunimosCalls}ms  FindProject max: {this.maxFindProjectTime.Milliseconds}ms avg: {(this.numFindProjectCalls == 0 ? -1 : this.totalFindProjectTime.Milliseconds / this.numFindProjectCalls)}ms machines: {this.maxMachines} chests: {this.maxChests} tiles: {this.maxVisitedTiles}");
-                this.maxMachines = 0;
-                this.maxChests = 0;
-                this.maxVisitedTiles = 0;
-                this.numFindProjectCalls = 0;
-                this.totalFindProjectTime = new TimeSpan(0);
-                this.maxFindProjectTime = new TimeSpan(0);
+                    $"DoJunimos Performance Telemetry -- DoJunimos min: {this.minDoJunimosTime.TotalMilliseconds:0.##}ms max: {this.maxDoJunimosTime.TotalMilliseconds:0.##}ms avg: {this.totalDoJunimosTime.TotalMilliseconds / this.numDoJunimosCalls:0.##}ms");
                 this.numDoJunimosCalls = 0;
-                this.totalDoJunimosTime = new TimeSpan(0);
-                this.maxDoJunimosTime = new TimeSpan(0);
+                this.totalDoJunimosTime = TimeSpan.Zero;
+                this.maxDoJunimosTime = TimeSpan.Zero;
+                this.minDoJunimosTime = TimeSpan.MaxValue;
+
+                if (this.cachedNetworks.Values.SelectMany(n => n).Any() && Game1.timeOfDay % 200 == 0)
+                {
+                    int machineCount = this.cachedNetworks.Values
+                        .SelectMany(n => n)
+                        .Sum(n => n.Machines.Values.Sum(m => m.Count));
+
+                    int chestCount = this.cachedNetworks.Values
+                        .SelectMany(n => n)
+                        .Sum(n => n.Chests.Count);
+
+                    var worst = this.cachedNetworks
+                        .SelectMany(
+                            kvp => kvp.Value,
+                            (kvp, network) => new
+                            {
+                                Location = kvp.Key,
+                                ChestCount = network.Chests.Count,
+                                MachineCount = network.Machines.Values.Sum(m => m.Count),
+                            })
+                        .MaxBy(x => x.ChestCount * x.MachineCount)!;
+
+                    this.LogInfo(
+                        $"DoJunimos Performance Telemetry -- Total machines: {machineCount}. Total chests: {chestCount}. Most expensive looking network is in `{worst.Location.Name}': Machines: {worst.MachineCount} Chests: {worst.ChestCount}");
+                }
             }
         }
 
@@ -155,10 +177,15 @@ namespace NermNermNerm.Junimatic
             var timer = Stopwatch.StartNew();
             this.DoJunimos(true);
             this.numDoJunimosCalls += 1;
-            this.totalDoJunimosTime += timer.Elapsed;
-            if (timer.Elapsed > this.maxDoJunimosTime)
+            var elapsed = timer.Elapsed;
+            this.totalDoJunimosTime += elapsed;
+            if (elapsed > this.maxDoJunimosTime)
             {
-                this.maxDoJunimosTime = timer.Elapsed;
+                this.maxDoJunimosTime = elapsed;
+            }
+            if (elapsed < this.minDoJunimosTime)
+            {
+                this.minDoJunimosTime = elapsed;
             }
         }
 
@@ -218,14 +245,7 @@ namespace NermNermNerm.Junimatic
                 {
                     foreach (var junimoType in Enum.GetValues<JunimoType>().Where(jt => numAvailableJunimos[jt] > 0))
                     {
-                        var w = Stopwatch.StartNew();
                         var project = this.FindProject(network, isShinyTest, junimoType, location);
-                        this.numFindProjectCalls += 1;
-                        this.totalFindProjectTime += w.Elapsed;
-                        if (w.Elapsed > this.maxFindProjectTime)
-                        {
-                            this.maxFindProjectTime = w.Elapsed;
-                        }
                         if (project is not null)
                         {
                             this.LogTrace($"Starting Animated Junimo for {project}");
@@ -428,13 +448,6 @@ namespace NermNermNerm.Junimatic
 
         public static string ObjectListToLogString(IEnumerable<Item> items)
             => string.Join(",", items.Select(ObjectToLogString));
-
-        record class MachineNetwork(
-            IReadOnlyDictionary<JunimoType, IReadOnlyList<GameMachine>> Machines,
-            IReadOnlyList<GameStorage> Chests,
-            StardewValley.Object hut,
-            Point startingTile,
-            IReadOnlyList<Vector2> corners);
 
         private List<MachineNetwork> BuildNetwork(GameLocation location)
         {
@@ -735,16 +748,8 @@ namespace NermNermNerm.Junimatic
                         return new JunimoAssignment(projectType, location, portal, originTile, fullMachine, chestWithSpace, itemsToRemoveFromChest: null);
                     }
                 }
-
-                // Maybesomeday:  Store a list of all the tiles we walked, and walk the whole list again looking for chests and
-                // machines on diagonals.
             }
 
-            // Only collecting stats for complete misses simplifies the code and doesn't detract much from the quality of
-            // the data we get out.
-            this.maxVisitedTiles = Math.Max(this.maxVisitedTiles, visitedTiles.Count);
-            this.maxChests = Math.Max(this.maxChests, knownChests.Count);
-            this.maxMachines = Math.Max(this.maxMachines, fullMachines.Count + emptyMachines.Count);
             return null;
         }
 
