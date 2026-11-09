@@ -7,8 +7,9 @@ using StardewValley.Inventories;
 using StardewValley.Objects;
 using StardewValley.TerrainFeatures;
 using System;
+using Force.DeepCloner;
 using NermNermNerm.Stardew.LocalizeFromSource;
-
+using StardewModdingAPI;
 using static NermNermNerm.Stardew.LocalizeFromSource.SdvLocalize;
 
 namespace NermNermNerm.Junimatic
@@ -87,8 +88,19 @@ namespace NermNermNerm.Junimatic
             var machineData = this.Machine.GetMachineData();
             var inputs = new List<Item>();
 
+            var rawNewContents = storage.SafeInventory.Where(i => !isShinyTest(i));
+            if (ModEntry.Config.DontTakeLastItem)
+            {
+                rawNewContents = rawNewContents.Where(i => i.Stack > 1).Select(i =>
+                {
+                     var copy = i.getOne();
+                     copy.Stack = i.Stack - 1;
+                     return copy;
+                });
+            }
             var sourceInventory = new Inventory();
-            sourceInventory.AddRange(storage.SafeInventory.Where(i => !isShinyTest(i)).ToArray());
+            sourceInventory.AddRange(rawNewContents.ToArray());
+
             // Ensure it has the coal (aka all the 'AdditionalConsumedItems')
             if (machineData.AdditionalConsumedItems is not null)
             {
@@ -120,7 +132,7 @@ namespace NermNermNerm.Junimatic
                             {
                                 foreach ((string extraItemId, int extraCount) in extraMachineConfigApi.GetExtraRequirements(machineItemOutput))
                                 {
-                                    var matchingItem = sourceInventory.FirstOrDefault(item => CraftingRecipe.ItemMatchesForCrafting(item, extraItemId), null);
+                                    var matchingItem = sourceInventory.FirstOrDefault(i => CraftingRecipe.ItemMatchesForCrafting(i, extraItemId), null);
                                     if (matchingItem != null)
                                     {
                                         var itemToAdd = matchingItem.getOne();
@@ -130,7 +142,7 @@ namespace NermNermNerm.Junimatic
                                 }
 
                                 foreach ((string extraContextTags, int extraCount) in extraMachineConfigApi.GetExtraTagsRequirements(machineItemOutput)) {
-                                    var matchingItem = sourceInventory.FirstOrDefault(item => ItemContextTagManager.DoesTagQueryMatch(extraContextTags, item?.GetContextTags() ?? new HashSet<string>()), null);
+                                    var matchingItem = sourceInventory.FirstOrDefault(i => ItemContextTagManager.DoesTagQueryMatch(extraContextTags, i?.GetContextTags() ?? new HashSet<string>()), null);
                                     if (matchingItem != null)
                                     {
                                         var itemToAdd = matchingItem.getOne();

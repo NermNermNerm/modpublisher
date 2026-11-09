@@ -64,6 +64,14 @@ namespace NermNermNerm.Junimatic
                 setValue: value => Config.AllowPlaydates = value,
                 tooltip: () => L("If this is checked, Junimos occasionally pop out of Junimo huts in the house to play with children.")
             );
+
+            configMenu.AddBoolOption(
+                mod: ModManifest,
+                name: () => L("Keep one item"),
+                getValue: () => Config.DontTakeLastItem,
+                setValue: value => Config.DontTakeLastItem = value,
+                tooltip: () => L("If this is checked, Junimos will not take the last item from a chest.")
+            );
         }
     }
 }

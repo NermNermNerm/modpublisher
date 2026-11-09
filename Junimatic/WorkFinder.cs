@@ -7,6 +7,7 @@ using Microsoft.Xna.Framework;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+using StardewValley.Inventories;
 using StardewValley.TokenizableStrings;
 using static NermNermNerm.Stardew.LocalizeFromSource.SdvLocalize;
 
@@ -390,10 +391,30 @@ namespace NermNermNerm.Junimatic
                     {
                         foreach (var chest in network.Chests)
                         {
-                            if (emptyMachine.FillMachineFromChest(chest, isShinyTest))
+                            var shoppingList = emptyMachine.GetRecipeFromChest(chest, isShinyTest);
+                            if (shoppingList is not null)
                             {
-                                this.LogTrace($"{Game1.timeOfDay} Automatic machine fill of {emptyMachine} on {location.Name} from {chest}");
-                                return true;
+                                var toteBag = new Inventory();
+                                if (chest.TryFulfillShoppingList(shoppingList, toteBag))
+                                {
+                                    emptyMachine.FillMachineFromInventory(toteBag);
+                                }
+
+                                if (toteBag.Count == 0)
+                                {
+                                    this.LogTrace($"{Game1.timeOfDay} Automatic machine fill of {emptyMachine} on {location.Name} from {chest} with {WorkFinder.ObjectListToLogString(shoppingList)}");
+                                    return true;
+                                }
+                                else
+                                {
+                                    this.LogWarning($"A machine ({emptyMachine.MachineTypeId}) did not use all the ingredients its recipe said it would.  Recipe says {WorkFinder.ObjectListToLogString(shoppingList)}. But these items were left over {toteBag}.");
+                                    chest.UnsafeInventory.AddRange(toteBag);
+                                    if (toteBag.Sum(i => i.Stack) < shoppingList.Sum(i => i.Stack))
+                                    {
+                                        // seems to have at least done something.
+                                        return true;
+                                    }
+                                }
                             }
                         }
                         unfillableMachineIds.Add(emptyMachine.MachineTypeId);
