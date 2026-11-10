@@ -122,7 +122,13 @@ namespace NermNermNerm.Junimatic
                         return null;
                     }
 
-                    // i.GetOne() instead of the ItemRegistry.Create to make sure we get all the nuances of item.
+                    // Issue:  HasAdditionalRequirements just tells us if the inventory contains the items that meet the
+                    // requirements.  It doesn't tell us which items were the ones it picked.  By creating an item from
+                    // whole cloth, we're ignoring the quality of the item.  By luck, there aren't any machines that I'm
+                    // aware of that put quality requirements on the additional items.  If this becomes an issue, the
+                    // only way forward (at the current state of the sdv code), would be to copy-pasta HasAdditionalRequirements
+                    // and adapt it to tell us the stack(s) that it needs to draw from so we can call getOne on them
+                    // to make sure we copy all the nuances.
                     inputs.AddRange(machineData.AdditionalConsumedItems.Select(i => ItemRegistry.Create(i.ItemId, i.RequiredCount)));
                 }
 
