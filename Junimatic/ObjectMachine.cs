@@ -88,34 +88,44 @@ namespace NermNermNerm.Junimatic
             var machineData = this.Machine.GetMachineData();
             var inputs = new List<Item>();
 
-            var rawNewContents = storage.SafeInventory.Where(i => !isShinyTest(i));
-            if (ModEntry.Config.DontTakeLastItem)
-            {
-                rawNewContents = rawNewContents.Where(i => i.Stack > 1).Select(i =>
-                {
-                     var copy = i.getOne();
-                     copy.Stack = i.Stack - 1;
-                     return copy;
-                });
-            }
-            var sourceInventory = new Inventory();
-            sourceInventory.AddRange(rawNewContents.ToArray());
+            var rawNewContents = storage.SafeInventory
+                .Where(i => !isShinyTest(i) && (!ModEntry.Config.DontTakeLastItem || i.Stack > 1))
+                .ToArray();
 
-            // Ensure it has the coal (aka all the 'AdditionalConsumedItems')
-            if (machineData.AdditionalConsumedItems is not null)
-            {
-                if (!MachineDataUtility.HasAdditionalRequirements(sourceInventory, machineData.AdditionalConsumedItems, out _))
-                {
-                    return null;
-                }
-
-                inputs.AddRange(machineData.AdditionalConsumedItems.Select(i => ItemRegistry.Create(i.ItemId, i.RequiredCount)));
-            }
-
-            // Extra Machine Config applies some extra logic to game functions that relies on autoLoadFrom being set to the appropriate inventory.
+            // Extra Machine Config applies some extra logic to game functions that relies on autoLoadFrom being set to
+            // the appropriate inventory.  We'll restore it in the 'finally' block as well.
             var oldAutoLoadFrom = StardewValley.Object.autoLoadFrom;
+
             try
             {
+                // The try/finally block is built for this case -- note that we're actually modifying the real inventory.
+                // Making a copy of each item would be the safer play, but it's expensive to run (it roughly doubles
+                // the amount of time to do the whole WorkFinder.DoJunimos calculation!).  We could also have copypasta'ed
+                // methods from MachineDataUtility and added the "leave one item" logic there, but then we'd be
+                // more vulnerable to changes in the game code.
+                if (ModEntry.Config.DontTakeLastItem)
+                {
+                    foreach (var i in rawNewContents)
+                    {
+                        --i.Stack; // pretend that we have one less of everything
+                    }
+                }
+
+                var sourceInventory = new Inventory();
+                sourceInventory.AddRange(rawNewContents.ToArray());
+
+                // Ensure it has the coal (aka all the 'AdditionalConsumedItems')
+                if (machineData.AdditionalConsumedItems is not null)
+                {
+                    if (!MachineDataUtility.HasAdditionalRequirements(sourceInventory, machineData.AdditionalConsumedItems, out _))
+                    {
+                        return null;
+                    }
+
+                    // i.GetOne() instead of the ItemRegistry.Create to make sure we get all the nuances of item.
+                    inputs.AddRange(machineData.AdditionalConsumedItems.Select(i => ItemRegistry.Create(i.ItemId, i.RequiredCount)));
+                }
+
                 StardewValley.Object.autoLoadFrom = sourceInventory;
                 foreach (var item in sourceInventory)
                 {
@@ -161,6 +171,14 @@ namespace NermNermNerm.Junimatic
             finally
             {
                 StardewValley.Object.autoLoadFrom = oldAutoLoadFrom;
+
+                if (ModEntry.Config.DontTakeLastItem)
+                {
+                    foreach (var i in rawNewContents)
+                    {
+                        ++i.Stack;
+                    }
+                }
             }
 
             return null;
