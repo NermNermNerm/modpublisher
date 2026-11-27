@@ -100,12 +100,12 @@ namespace NermNermNerm.Junimatic
                             {
                                 Location = kvp.Key,
                                 ChestCount = network.Chests.Count,
-                                MachineCount = network.Machines.Values.Sum(m => m.Count),
+                                MachineCount = network.Machines.Values.SelectMany(ml => ml).ToHashSet().Count,
                             })
                         .MaxBy(x => x.ChestCount * x.MachineCount)!;
 
                     this.LogInfo(
-                        $"DoJunimos Performance Telemetry -- Total machines: {machineCount}. Total chests: {chestCount}. Most expensive looking network is in `{worst.Location.Name}': Machines: {worst.MachineCount} Chests: {worst.ChestCount}");
+                        $"DoJunimos Performance Telemetry -- Total machines: {machineCount}. Total chests: {chestCount}. Most expensive-looking network is in `{worst.Location.Name}': Machines: {worst.MachineCount} Chests: {worst.ChestCount}");
                 }
             }
         }
@@ -213,7 +213,9 @@ namespace NermNermNerm.Junimatic
             }
 
             // Try to employ junimos in visible locations first:
-            HashSet<GameLocation> animatedLocations = new HashSet<GameLocation>(Game1.getOnlineFarmers().Select(f => f.currentLocation).Where(l => l is not null && allJunimoFriendlyLocations.Contains(l)));
+            var animatedLocations = new HashSet<GameLocation>(Game1.getOnlineFarmers()
+                .Select(f => f.currentLocation)
+                .Where(l => l is not null && allJunimoFriendlyLocations.Contains(l) && !this.IsLocationTemporarilyNotDoingJunimos(l)));
             foreach (GameLocation location in animatedLocations)
             {
                 if (!this.cachedNetworks.TryGetValue(location, out var networks))
